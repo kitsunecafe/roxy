@@ -1,13 +1,10 @@
 use std::{
     collections::HashMap,
-    fmt::Display,
     fs,
-    io::{self, BufRead, BufReader, BufWriter, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     path::Path,
 };
 
-use chrono::serde::ts_seconds_option;
-use chrono::{DateTime, Utc};
 use glob::glob;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -53,13 +50,14 @@ fn create_files(output: &str, contents: Vec<Content>, base_context: &Context) ->
                     .get("layout")
                     .unwrap_or(&default_layout);
 
-                // TODO warn about missing layouts here
                 if let Ok(result) = TEMPLATES.render(layout, &context) {
                     let file_path = Path::new(&output);
                     let mut file_path = file_path.join(&content.path);
                     file_path.set_extension("html");
                     let mut file = fs::File::create(file_path)?;
                     let _ = file.write_all(result.as_bytes());
+                } else {
+                    println!("Error rendering template {}: layout not found \"{}\"", content.path, layout);
                 }
             }
         }
