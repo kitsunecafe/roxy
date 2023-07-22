@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs,
-    io::{self, BufRead, BufReader, Read, Write, BufWriter},
+    io::{self, BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
@@ -15,7 +15,7 @@ use tera::{Context, Tera};
 
 lazy_static! {
     pub static ref TEMPLATES: Tera = {
-        let mut tera = match Tera::new("examples/basic/templates/**/*") {
+        let mut tera = match Tera::new("layouts/**/*") {
             Ok(t) => t,
             Err(e) => {
                 println!("Parsing error(s): {}", e);
@@ -37,7 +37,34 @@ struct Content {
 #[derive(Debug, Serialize, Deserialize)]
 struct Frontmatter(HashMap<String, String>);
 
-fn create_files(content: Vec<Content>, base_context: &Context) -> io::Result<()> {
+fn create_files(output: &str, contents: Vec<Content>, base_context: &Context) -> io::Result<()> {
+    let default_layout = "index.html".to_string();
+    for content in contents.iter() {
+        if let Some(parent) = Path::new(&content.path).parent() {
+            let path = Path::new(&output);
+            let path = path.join(parent);
+            let _ = fs::create_dir_all(path)?;
+            if let Ok(mut context) = Context::from_serialize(content) {
+                context.extend(base_context.clone());
+
+                let layout = content
+                    .frontmatter
+                    .0
+                    .get("layout")
+                    .unwrap_or(&default_layout);
+
+                // TODO warn about missing layouts here
+                if let Ok(result) = TEMPLATES.render(layout, &context) {
+                    let file_path = Path::new(&output);
+                    let mut file_path = file_path.join(&content.path);
+                    file_path.set_extension("html");
+                    let mut file = fs::File::create(file_path)?;
+                    let _ = file.write_all(result.as_bytes());
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -70,7 +97,6 @@ fn read_frontmatter<R: BufRead>(reader: &mut R) -> io::Result<Frontmatter> {
             break;
         }
 
-
         if let Some((k, v)) = buf.split_once(":") {
             hm.insert(k.trim().to_string(), v.trim().to_string());
         }
@@ -88,24 +114,28 @@ fn compile_content(dir: &str) -> io::Result<Vec<Content>> {
     for entry in glob(path.as_str()).expect("Couldn't read from {dir}") {
         if let Ok(entry) = entry {
             if entry.is_file() {
-                println!("opening {entry:?}");
-                let file = fs::File::open(entry.as_path())?;
-                let mut reader = BufReader::new(file);
-                let frontmatter = read_frontmatter(&mut reader)?;
-                let buf = String::new();
-                let parser = pulldown_cmark::Parser::new(buf.as_str());
-                let mut content = String::new();
+                if let Ok(file_path) = entry.strip_prefix(dir) {
+                    if let Some(file_path) = file_path.to_str() {
+                        let file = fs::File::open(entry.as_path())?;
+                        let mut reader = BufReader::new(file);
+                        let frontmatter = read_frontmatter(&mut reader)?;
+                        let mut buf = Vec::new();
+                        reader.read_to_end(&mut buf)?;
+                        if let Ok(str) = std::str::from_utf8(&buf) {
+                            let parser = pulldown_cmark::Parser::new(str);
+                            let mut content = String::new();
 
-                if let Some((_, rest)) = path.split_once(std::path::MAIN_SEPARATOR_STR) {
-                    pulldown_cmark::html::push_html(&mut content, parser);
+                            pulldown_cmark::html::push_html(&mut content, parser);
 
-                    contents.push(Content {
-                        path: rest.to_string(),
-                        frontmatter,
-                        content
-                    });
+                            println!("CONTENT {content:?}");
+                            contents.push(Content {
+                                path: file_path.to_string(),
+                                frontmatter,
+                                content,
+                            });
+                        }
+                    }
                 }
-
             }
         }
     }
@@ -121,7 +151,7 @@ fn main() {
         let content_map = compile_content_map(&content);
         let mut context = Context::new();
         context.insert("data", &content_map);
-        if let Ok(_) = create_files(content, &context) {
+        if let Ok(_) = create_files(OUTPUT, content, &context) {
             println!(
                 "Output files at {}",
                 Path::new(OUTPUT).canonicalize().unwrap().to_string_lossy()
@@ -129,4 +159,3 @@ fn main() {
         }
     }
 }
-
