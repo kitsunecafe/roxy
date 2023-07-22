@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write, BufWriter},
     path::Path,
 };
 
@@ -30,16 +30,16 @@ lazy_static! {
 #[derive(Serialize, Deserialize)]
 struct Content {
     pub path: String,
-    pub title: String,
-    #[serde(with = "ts_seconds_option")]
-    pub date: Option<DateTime<Utc>>,
+    pub frontmatter: Frontmatter,
     pub content: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Frontmatter(HashMap<String, String>);
 
 fn create_files(content: Vec<Content>, base_context: &Context) -> io::Result<()> {
     Ok(())
 }
-
 
 fn compile_content_map<'a>(contents: &'a Vec<Content>) -> HashMap<String, Vec<&'a Content>> {
     let mut hm: HashMap<String, Vec<&'a Content>> = HashMap::new();
@@ -61,13 +61,52 @@ fn compile_content_map<'a>(contents: &'a Vec<Content>) -> HashMap<String, Vec<&'
     hm
 }
 
+fn read_frontmatter<R: BufRead>(reader: &mut R) -> io::Result<Frontmatter> {
+    let mut hm = HashMap::new();
+    let mut buf = String::new();
+
+    while let Ok(bytes_read) = reader.read_line(&mut buf) {
+        if bytes_read == 0 || buf.starts_with('-') {
+            break;
+        }
+
+
+        if let Some((k, v)) = buf.split_once(":") {
+            hm.insert(k.trim().to_string(), v.trim().to_string());
+        }
+
+        buf.clear();
+    }
+
+    Ok(Frontmatter(hm))
+}
+
 fn compile_content(dir: &str) -> io::Result<Vec<Content>> {
     let mut contents = Vec::new();
     let path = format!("{}/**/*", dir);
 
     for entry in glob(path.as_str()).expect("Couldn't read from {dir}") {
         if let Ok(entry) = entry {
-            println!("{entry:?}");
+            if entry.is_file() {
+                println!("opening {entry:?}");
+                let file = fs::File::open(entry.as_path())?;
+                let mut reader = BufReader::new(file);
+                let frontmatter = read_frontmatter(&mut reader)?;
+                let buf = String::new();
+                let parser = pulldown_cmark::Parser::new(buf.as_str());
+                let mut content = String::new();
+
+                if let Some((_, rest)) = path.split_once(std::path::MAIN_SEPARATOR_STR) {
+                    pulldown_cmark::html::push_html(&mut content, parser);
+
+                    contents.push(Content {
+                        path: rest.to_string(),
+                        frontmatter,
+                        content
+                    });
+                }
+
+            }
         }
     }
 
@@ -90,3 +129,4 @@ fn main() {
         }
     }
 }
+
