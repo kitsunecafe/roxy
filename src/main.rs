@@ -127,7 +127,6 @@ fn compile_content(dir: &str) -> io::Result<Vec<Content>> {
 
                             pulldown_cmark::html::push_html(&mut content, parser);
 
-                            println!("CONTENT {content:?}");
                             contents.push(Content {
                                 path: file_path.to_string(),
                                 frontmatter,
