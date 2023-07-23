@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    error::Error,
     fs,
     io::{self, BufRead, BufReader, Read, Write},
     path::Path,
@@ -33,7 +34,12 @@ fn load_templates(dir: &str) -> Tera {
     tera
 }
 
-fn create_files(output: &str, layout_dir: &str, contents: Vec<Content>, base_context: &Context) -> io::Result<()> {
+fn create_files(
+    output: &str,
+    layout_dir: &str,
+    contents: Vec<Content>,
+    base_context: &Context,
+) -> io::Result<()> {
     let default_layout = "index.html".to_string();
     let templates = load_templates(layout_dir);
     for content in contents.iter() {
@@ -50,17 +56,23 @@ fn create_files(output: &str, layout_dir: &str, contents: Vec<Content>, base_con
                     .get("layout")
                     .unwrap_or(&default_layout);
 
-                if let Ok(result) = templates.render(layout, &context) {
+                let result = templates.render(layout, &context);
+                if let Ok(result) = result {
                     let file_path = Path::new(&output);
                     let mut file_path = file_path.join(&content.path);
                     file_path.set_extension("html");
                     let mut file = fs::File::create(file_path)?;
                     let _ = file.write_all(result.as_bytes());
-                } else {
+                } else if let Err(err) = &result {
                     println!(
-                        "Error rendering template {}: layout not found \"{}\"",
-                        content.path, layout
+                        "Error rendering template {}: {}",
+                        &content.path,
+                        &err.to_string()
                     );
+
+                    if let Some(source) = err.source() {
+                        println!("Details: {}", source);
+                    }
                 }
             }
         }
@@ -167,7 +179,10 @@ fn main() {
         if let Ok(_) = create_files(&opts.output, &opts.layouts, content, &context) {
             println!(
                 "Output files at {}",
-                Path::new(&opts.output).canonicalize().unwrap().to_string_lossy()
+                Path::new(&opts.output)
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
             );
         }
     }
