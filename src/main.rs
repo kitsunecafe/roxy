@@ -5,24 +5,11 @@ use std::{
     path::Path,
 };
 
+use clap::{command, Parser};
 use glob::glob;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tera::{Context, Tera};
-
-lazy_static! {
-    pub static ref TEMPLATES: Tera = {
-        let mut tera = match Tera::new("layouts/**/*") {
-            Ok(t) => t,
-            Err(e) => {
-                println!("Parsing error(s): {}", e);
-                ::std::process::exit(1);
-            }
-        };
-        tera.autoescape_on(vec![]);
-        tera
-    };
-}
 
 #[derive(Serialize, Deserialize)]
 struct Content {
@@ -34,8 +21,21 @@ struct Content {
 #[derive(Debug, Serialize, Deserialize)]
 struct Frontmatter(HashMap<String, String>);
 
-fn create_files(output: &str, contents: Vec<Content>, base_context: &Context) -> io::Result<()> {
+fn load_templates(dir: &str) -> Tera {
+    let mut tera = match Tera::new("layouts/**/*") {
+        Ok(t) => t,
+        Err(e) => {
+            println!("Parsing error(s): {}", e);
+            ::std::process::exit(1);
+        }
+    };
+    tera.autoescape_on(vec![]);
+    tera
+}
+
+fn create_files(output: &str, layout_dir: &str, contents: Vec<Content>, base_context: &Context) -> io::Result<()> {
     let default_layout = "index.html".to_string();
+    let templates = load_templates(layout_dir);
     for content in contents.iter() {
         if let Some(parent) = Path::new(&content.path).parent() {
             let path = Path::new(&output);
@@ -50,14 +50,17 @@ fn create_files(output: &str, contents: Vec<Content>, base_context: &Context) ->
                     .get("layout")
                     .unwrap_or(&default_layout);
 
-                if let Ok(result) = TEMPLATES.render(layout, &context) {
+                if let Ok(result) = templates.render(layout, &context) {
                     let file_path = Path::new(&output);
                     let mut file_path = file_path.join(&content.path);
                     file_path.set_extension("html");
                     let mut file = fs::File::create(file_path)?;
                     let _ = file.write_all(result.as_bytes());
                 } else {
-                    println!("Error rendering template {}: layout not found \"{}\"", content.path, layout);
+                    println!(
+                        "Error rendering template {}: layout not found \"{}\"",
+                        content.path, layout
+                    );
                 }
             }
         }
@@ -140,18 +143,31 @@ fn compile_content(dir: &str) -> io::Result<Vec<Content>> {
     Ok(contents)
 }
 
-fn main() {
-    const INPUT: &str = "content/";
-    const OUTPUT: &str = "build/";
+#[derive(Parser)]
+#[command(name = "Roxy")]
+#[command(author = "KitsuneCafe")]
+#[command(version = "1.0")]
+#[command(about = "A very small static site generator", long_about = None)]
+pub struct Options {
+    #[arg(short, long, default_value = "build/")]
+    pub output: String,
+    #[arg(short, long, default_value = "content/")]
+    pub content: String,
+    #[arg(short, long, default_value = "layouts/")]
+    pub layouts: String,
+}
 
-    if let Ok(content) = compile_content(INPUT) {
+fn main() {
+    let opts = Options::parse();
+
+    if let Ok(content) = compile_content(&opts.content) {
         let content_map = compile_content_map(&content);
         let mut context = Context::new();
         context.insert("data", &content_map);
-        if let Ok(_) = create_files(OUTPUT, content, &context) {
+        if let Ok(_) = create_files(&opts.output, &opts.layouts, content, &context) {
             println!(
                 "Output files at {}",
-                Path::new(OUTPUT).canonicalize().unwrap().to_string_lossy()
+                Path::new(&opts.output).canonicalize().unwrap().to_string_lossy()
             );
         }
     }
