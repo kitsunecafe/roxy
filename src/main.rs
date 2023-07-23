@@ -7,7 +7,6 @@ use std::{
 
 use clap::{command, Parser};
 use glob::glob;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tera::{Context, Tera};
 
@@ -22,7 +21,8 @@ struct Content {
 struct Frontmatter(HashMap<String, String>);
 
 fn load_templates(dir: &str) -> Tera {
-    let mut tera = match Tera::new("layouts/**/*") {
+    let path = format!("{}/**/*", dir);
+    let mut tera = match Tera::new(path.as_str()) {
         Ok(t) => t,
         Err(e) => {
             println!("Parsing error(s): {}", e);
