@@ -21,7 +21,7 @@ title: My first post!
 Hello, Roxy!
 ```
 
-There are one special Frontmatter field: `layout`. By default, this will be `index.html` (from whatever directory is selected as the layouts folder). Setting this field will change the template Roxy uses for this file.
+There is one special Frontmatter field: `layout`. By default, this will be `index.html` (from whatever directory is selected as the layouts folder). Setting this field will change the template Roxy uses for this file.
 
 ```md
 title: My post with a custom layout
