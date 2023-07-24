@@ -36,12 +36,11 @@ fn load_templates(dir: &str) -> Tera {
 
 fn create_files(
     output: &str,
-    layout_dir: &str,
+    templates: &Tera,
     contents: Vec<Content>,
     base_context: &Context,
 ) -> io::Result<()> {
     let default_layout = "index.html".to_string();
-    let templates = load_templates(layout_dir);
     for content in contents.iter() {
         if let Some(parent) = Path::new(&content.path).parent() {
             let path = Path::new(&output);
@@ -120,9 +119,10 @@ fn read_frontmatter<R: BufRead>(reader: &mut R) -> io::Result<Frontmatter> {
     Ok(Frontmatter(hm))
 }
 
-fn compile_content(dir: &str) -> io::Result<Vec<Content>> {
+fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> {
     let mut contents = Vec::new();
     let path = format!("{}/**/*", dir);
+    let empty_context = Context::new();
 
     for entry in glob(path.as_str()).expect("Couldn't read from {dir}") {
         if let Ok(entry) = entry {
@@ -139,6 +139,14 @@ fn compile_content(dir: &str) -> io::Result<Vec<Content>> {
                             let mut content = String::new();
 
                             pulldown_cmark::html::push_html(&mut content, parser);
+
+                            let result = templates.render_str(content.as_str(), &empty_context);
+                            if let Ok(rendered) = result
+                            {
+                                content = rendered;
+                            } else if let Err(err) = result {
+                                println!("Failed to render {file_path:?} {:?}", err.kind);
+                            }
 
                             contents.push(Content {
                                 path: file_path.to_string(),
@@ -172,11 +180,12 @@ pub struct Options {
 fn main() {
     let opts = Options::parse();
 
-    if let Ok(content) = compile_content(&opts.content) {
+    let mut templates = load_templates(&opts.layouts);
+    if let Ok(content) = compile_content(&opts.content, &mut templates) {
         let content_map = compile_content_map(&content);
         let mut context = Context::new();
         context.insert("data", &content_map);
-        if let Ok(_) = create_files(&opts.output, &opts.layouts, content, &context) {
+        if let Ok(_) = create_files(&opts.output, &templates, content, &context) {
             println!(
                 "Output files at {}",
                 Path::new(&opts.output)
