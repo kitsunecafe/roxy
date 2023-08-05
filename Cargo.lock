@@ -677,6 +677,7 @@ dependencies = [
  "clap",
  "glob",
  "pulldown-cmark",
+ "regex",
  "serde",
  "tera",
 ]

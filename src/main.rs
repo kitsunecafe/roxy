@@ -8,12 +8,14 @@ use std::{
 
 use clap::{command, Parser};
 use glob::glob;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tera::{Context, Tera};
 
 #[derive(Serialize, Deserialize)]
 struct Content {
     pub path: String,
+    pub slug: String,
     pub frontmatter: Frontmatter,
     pub content: String,
 }
@@ -43,9 +45,16 @@ fn create_files(
     let default_layout = "index.html".to_string();
     for content in contents.iter() {
         if let Some(parent) = Path::new(&content.path).parent() {
-            let path = Path::new(&output);
-            let path = path.join(parent);
-            let _ = fs::create_dir_all(path)?;
+            let file_stem = Path::new(&content.path).file_stem().unwrap();
+
+            let path = Path::new(&output).join(parent);
+            let path = if file_stem.is_empty() || file_stem.eq_ignore_ascii_case("index") {
+                path
+            } else {
+                path.join(file_stem)
+            };
+
+            let _ = fs::create_dir_all(&path)?;
             if let Ok(mut context) = Context::from_serialize(content) {
                 context.extend(base_context.clone());
 
@@ -57,9 +66,9 @@ fn create_files(
 
                 let result = templates.render(layout, &context);
                 if let Ok(result) = result {
-                    let file_path = Path::new(&output);
-                    let mut file_path = file_path.join(&content.path);
+                    let mut file_path = path.join("index");
                     file_path.set_extension("html");
+                    println!("creating {file_path:?}");
                     let mut file = fs::File::create(file_path)?;
                     let _ = file.write_all(result.as_bytes());
                 } else if let Err(err) = &result {
@@ -124,11 +133,18 @@ fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> 
     let path = format!("{}/**/*", dir);
     let empty_context = Context::new();
 
-    for entry in glob(path.as_str()).expect("Couldn't read from {dir}") {
+    for entry in glob(path.as_str()).expect(format!("Couldn't read from {dir}").as_str()) {
         if let Ok(entry) = entry {
             if entry.is_file() {
                 if let Ok(file_path) = entry.strip_prefix(dir) {
+                    if let Some(file_name) = file_path.file_name() {
+                        if file_name.to_string_lossy().starts_with(".") {
+                            continue;
+                        }
+                    }
+
                     if let Some(file_path) = file_path.to_str() {
+                        println!("{file_path:?}");
                         let file = fs::File::open(entry.as_path())?;
                         let mut reader = BufReader::new(file);
                         let frontmatter = read_frontmatter(&mut reader)?;
@@ -141,15 +157,21 @@ fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> 
                             pulldown_cmark::html::push_html(&mut content, parser);
 
                             let result = templates.render_str(content.as_str(), &empty_context);
-                            if let Ok(rendered) = result
-                            {
+                            if let Ok(rendered) = result {
                                 content = rendered;
                             } else if let Err(err) = result {
-                                println!("Failed to render {file_path:?} {:?}", err.kind);
+                                println!("Failed to render {file_path:?} {:?}", err);
                             }
 
+                            let re = Regex::new(r"/?(index)?\.(md|html)(.+)?").unwrap();
+                            let mut slug = re.replace(file_path, "").to_string();
+                            slug.insert(0, '/');
+
+                            let path = file_path.to_string();
+
                             contents.push(Content {
-                                path: file_path.to_string(),
+                                path,
+                                slug,
                                 frontmatter,
                                 content,
                             });
