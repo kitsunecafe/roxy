@@ -197,7 +197,7 @@ fn copy_static(in_dir: &str, out_dir: &str) -> io::Result<()> {
                 if is_hidden(&entry) { continue; }
 
                 if let Some(ext) = entry.extension() {
-                    if ext != "md" && ext != "html" {
+                    if ext != "md" && ext != "html" && ext != "tera" {
                         if let Ok(bare_path) = entry.strip_prefix(in_dir) {
                             let out_path = out_root.clone().join(bare_path);
                             fs::copy(entry, out_path)?;
