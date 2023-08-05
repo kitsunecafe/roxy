@@ -136,11 +136,7 @@ fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> 
         if let Ok(entry) = entry {
             if entry.is_file() {
                 if let Ok(file_path) = entry.strip_prefix(dir) {
-                    if let Some(file_name) = file_path.file_name() {
-                        if file_name.to_string_lossy().starts_with(".") {
-                            continue;
-                        }
-                    }
+                    if is_hidden(&entry) { continue; }
 
                     if let Some(file_path) = file_path.to_str() {
                         let file = fs::File::open(entry.as_path())?;
@@ -183,6 +179,38 @@ fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> 
     Ok(contents)
 }
 
+fn is_hidden<P: AsRef<Path>>(path: P) -> bool {
+    let path = path.as_ref();
+    if let Some(file_name) = path.file_name() {
+        return file_name.to_string_lossy().starts_with(".");
+    }
+
+    false
+}
+
+fn copy_static(in_dir: &str, out_dir: &str) -> io::Result<()> {
+    let path = format!("{in_dir}/**/*");
+    let out_root = Path::new(out_dir);
+    for entry in glob(path.as_str()).expect(format!("Couldn't read from {in_dir}").as_str()) {
+        if let Ok(entry) = entry {
+            if entry.is_file() {
+                if is_hidden(&entry) { continue; }
+
+                if let Some(ext) = entry.extension() {
+                    if ext != "md" && ext != "html" {
+                        if let Ok(bare_path) = entry.strip_prefix(in_dir) {
+                            let out_path = out_root.clone().join(bare_path);
+                            fs::copy(entry, out_path)?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Parser)]
 #[command(name = "Roxy")]
 #[command(author = "KitsuneCafe")]
@@ -206,6 +234,7 @@ fn main() {
         let mut context = Context::new();
         context.insert("data", &content_map);
         if let Ok(_) = create_files(&opts.output, &templates, content, &context) {
+            let _ = copy_static(&opts.content, &opts.output);
             println!(
                 "Output files at {}",
                 Path::new(&opts.output)
