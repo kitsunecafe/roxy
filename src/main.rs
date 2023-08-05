@@ -68,7 +68,6 @@ fn create_files(
                 if let Ok(result) = result {
                     let mut file_path = path.join("index");
                     file_path.set_extension("html");
-                    println!("creating {file_path:?}");
                     let mut file = fs::File::create(file_path)?;
                     let _ = file.write_all(result.as_bytes());
                 } else if let Err(err) = &result {
@@ -144,7 +143,6 @@ fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> 
                     }
 
                     if let Some(file_path) = file_path.to_str() {
-                        println!("{file_path:?}");
                         let file = fs::File::open(entry.as_path())?;
                         let mut reader = BufReader::new(file);
                         let frontmatter = read_frontmatter(&mut reader)?;
