@@ -157,7 +157,7 @@ fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> 
                                 println!("Failed to render {file_path:?} {:?}", err);
                             }
 
-                            let re = Regex::new(r"/?(index)?\.(md|html)(.+)?").unwrap();
+                            let re = Regex::new(r"/?(index)?\.(md|html|tera)(.+)?").unwrap();
                             let mut slug = re.replace(file_path, "").to_string();
                             slug.insert(0, '/');
 
