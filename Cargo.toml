@@ -8,7 +8,10 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.3.19", features = ["derive"] }
 glob = "0.3.1"
+highlight-pulldown = { path = "../highlight-pulldown/" }
+lazy_static = "1.4.0"
 pulldown-cmark = "0.9.3"
 regex = "1.9.1"
 serde = { version = "1.0.174", features = ["derive"] }
+syntect = "5.1.0"
 tera = "1.19.0"

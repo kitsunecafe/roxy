@@ -8,9 +8,20 @@ use std::{
 
 use clap::{command, Parser};
 use glob::glob;
+use highlight_pulldown::PulldownHighlighter;
+use lazy_static::{__Deref, lazy_static};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use syntect::{
+    highlighting::{Theme, ThemeSet},
+    parsing::SyntaxSet,
+};
 use tera::{Context, Tera};
+
+lazy_static! {
+    static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
+    static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
+}
 
 #[derive(Serialize, Deserialize)]
 struct Content {
@@ -24,7 +35,7 @@ struct Content {
 struct Frontmatter(HashMap<String, String>);
 
 fn load_templates(dir: &str) -> Tera {
-    let path = format!("{}/**/*", dir);
+    let path = format!("{dir}/**/*");
     let mut tera = match Tera::new(path.as_str()) {
         Ok(t) => t,
         Err(e) => {
@@ -127,16 +138,20 @@ fn read_frontmatter<R: BufRead>(reader: &mut R) -> io::Result<Frontmatter> {
     Ok(Frontmatter(hm))
 }
 
-fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> {
+fn compile_content(dir: &str, templates: &mut Tera, theme: &Theme) -> io::Result<Vec<Content>> {
     let mut contents = Vec::new();
     let path = format!("{}/**/*", dir);
     let empty_context = Context::new();
+    let syntax_set = SyntaxSet::load_defaults_newlines();
+    let highlighter = PulldownHighlighter::new(syntax_set, theme);
 
     for entry in glob(path.as_str()).expect(format!("Couldn't read from {dir}").as_str()) {
         if let Ok(entry) = entry {
             if entry.is_file() {
                 if let Ok(file_path) = entry.strip_prefix(dir) {
-                    if is_hidden(&entry) { continue; }
+                    if is_hidden(&entry) {
+                        continue;
+                    }
 
                     if let Some(file_path) = file_path.to_str() {
                         let file = fs::File::open(entry.as_path())?;
@@ -146,9 +161,11 @@ fn compile_content(dir: &str, templates: &mut Tera) -> io::Result<Vec<Content>> 
                         reader.read_to_end(&mut buf)?;
                         if let Ok(str) = std::str::from_utf8(&buf) {
                             let parser = pulldown_cmark::Parser::new(str);
+                            let parser = highlighter.highlight(parser).unwrap();
+
                             let mut content = String::new();
 
-                            pulldown_cmark::html::push_html(&mut content, parser);
+                            pulldown_cmark::html::push_html(&mut content, parser.into_iter());
 
                             let result = templates.render_str(content.as_str(), &empty_context);
                             if let Ok(rendered) = result {
@@ -194,7 +211,9 @@ fn copy_static(in_dir: &str, out_dir: &str) -> io::Result<()> {
     for entry in glob(path.as_str()).expect(format!("Couldn't read from {in_dir}").as_str()) {
         if let Ok(entry) = entry {
             if entry.is_file() {
-                if is_hidden(&entry) { continue; }
+                if is_hidden(&entry) {
+                    continue;
+                }
 
                 if let Some(ext) = entry.extension() {
                     if ext != "md" && ext != "html" && ext != "tera" {
@@ -223,25 +242,38 @@ pub struct Options {
     pub content: String,
     #[arg(short, long, default_value = "layouts/")]
     pub layouts: String,
+    #[arg(short, long, default_value = "base16-ocean.dark")]
+    pub theme: String,
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     let opts = Options::parse();
 
     let mut templates = load_templates(&opts.layouts);
-    if let Ok(content) = compile_content(&opts.content, &mut templates) {
-        let content_map = compile_content_map(&content);
-        let mut context = Context::new();
-        context.insert("data", &content_map);
-        if let Ok(_) = create_files(&opts.output, &templates, content, &context) {
-            let _ = copy_static(&opts.content, &opts.output);
-            println!(
-                "Output files at {}",
-                Path::new(&opts.output)
-                    .canonicalize()
-                    .unwrap()
-                    .to_string_lossy()
-            );
-        }
-    }
+
+    let file = fs::File::open(&opts.theme)?;
+    let mut reader = BufReader::new(file);
+    let theme = ThemeSet::load_from_reader(&mut reader).unwrap();
+    println!("Loaded {}", &opts.theme);
+
+    let content = compile_content(&opts.content, &mut templates, &theme)?;
+
+    let content_map = compile_content_map(&content);
+    let mut context = Context::new();
+    context.insert("data", &content_map);
+
+    let _ = create_files(&opts.output, &templates, content, &context)?;
+    let _ = copy_static(&opts.content, &opts.output);
+
+    println!(
+        "Output files at {}",
+        Path::new(&opts.output)
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+    );
+
+    Ok(())
 }
+
+// https://apitman.com/9/
