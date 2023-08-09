@@ -9,7 +9,6 @@ use std::{
 use clap::{command, Parser};
 use glob::glob;
 use highlight_pulldown::PulldownHighlighter;
-use lazy_static::{__Deref, lazy_static};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use syntect::{
@@ -17,11 +16,6 @@ use syntect::{
     parsing::SyntaxSet,
 };
 use tera::{Context, Tera};
-
-lazy_static! {
-    static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
-    static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
-}
 
 #[derive(Serialize, Deserialize)]
 struct Content {
@@ -216,7 +210,7 @@ fn copy_static(in_dir: &str, out_dir: &str) -> io::Result<()> {
                 }
 
                 if let Some(ext) = entry.extension() {
-                    if ext != "md" && ext != "html" && ext != "tera" {
+                    if !vec!["md", "html", "tera"].contains(&ext.to_str().unwrap()) {
                         if let Ok(bare_path) = entry.strip_prefix(in_dir) {
                             let out_path = out_root.clone().join(bare_path);
                             fs::copy(entry, out_path)?;
@@ -276,4 +270,3 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-// https://apitman.com/9/
