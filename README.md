@@ -4,7 +4,7 @@ This is a very lightweight and small static site generator.
 # Usage
 
 ```rs
-roxy --layouts ./layouts --input ./content --output ./build
+roxy --layouts ./layouts --input ./content --output ./build --theme theme.tmTheme
 ```
 
 ## Layouts
@@ -31,4 +31,8 @@ layout: special.tera
 ```
 
 Markdown is parsed using [pulldown-cmark](https://github.com/raphlinus/pulldown-cmark).
+
+## Themes
+
+Roxy takes any theme which is accepted by [syntect](https://github.com/trishume/syntect).
 
