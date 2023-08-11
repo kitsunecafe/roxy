@@ -25,14 +25,10 @@ There is one special Frontmatter field: `layout`. By default, this will be `inde
 
 ```md
 title: My post with a custom layout
-layout: special.html
+layout: special.tera
 ---
 # Fancy!
 ```
 
 Markdown is parsed using [pulldown-cmark](https://github.com/raphlinus/pulldown-cmark).
-
-## Output
-
-Roxy will create the same structure that exists in the content directory.
 

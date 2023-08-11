@@ -77,14 +77,10 @@ fn create_files(
                     let _ = file.write_all(result.as_bytes());
                 } else if let Err(err) = &result {
                     println!(
-                        "Error rendering template {}: {}",
+                        "Error rendering template {}: {:?}",
                         &content.path,
-                        &err.to_string()
+                        &err
                     );
-
-                    if let Some(source) = err.source() {
-                        println!("Details: {}", source);
-                    }
                 }
             }
         }
