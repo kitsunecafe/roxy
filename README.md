@@ -1,5 +1,5 @@
 # Roxy
-This is a very lightweight and small static site generator.
+This is a very lightweight and small static site generator. This is a highly unstable project with no promises of consistent API or even that it's functioning. Use with caution.
 
 # Usage
 
