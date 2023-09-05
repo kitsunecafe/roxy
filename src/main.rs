@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     error::Error,
     fs,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, Read, Seek, Write},
     path::Path,
 };
 
@@ -76,11 +76,7 @@ fn create_files(
                     let mut file = fs::File::create(file_path)?;
                     let _ = file.write_all(result.as_bytes());
                 } else if let Err(err) = &result {
-                    println!(
-                        "Error rendering template {}: {:?}",
-                        &content.path,
-                        &err
-                    );
+                    println!("Error rendering template {}: {:?}", &content.path, &err);
                 }
             }
         }
@@ -109,9 +105,18 @@ fn compile_content_map<'a>(contents: &'a Vec<Content>) -> HashMap<String, Vec<&'
     hm
 }
 
-fn read_frontmatter<R: BufRead>(reader: &mut R) -> io::Result<Frontmatter> {
+fn read_frontmatter<R: BufRead + Seek>(reader: &mut R) -> io::Result<Frontmatter> {
     let mut hm = HashMap::new();
     let mut buf = String::new();
+
+    reader.take(3).read_to_string(&mut buf)?;
+    if buf != "---".to_string() {
+        // no frontmatter, reset the reader
+        reader.seek(io::SeekFrom::Start(0))?;
+        return Ok(Frontmatter(hm));
+    }
+
+    buf.clear();
 
     while let Ok(bytes_read) = reader.read_line(&mut buf) {
         if bytes_read == 0 || buf.starts_with('-') {
@@ -129,6 +134,7 @@ fn read_frontmatter<R: BufRead>(reader: &mut R) -> io::Result<Frontmatter> {
 }
 
 fn compile_content(dir: &str, templates: &mut Tera, theme: &Theme) -> io::Result<Vec<Content>> {
+    let re = Regex::new(r"/?(index)?\.?(md|html|tera)(.+)?").unwrap();
     let mut contents = Vec::new();
     let path = format!("{}/**/*", dir);
     let empty_context = Context::new();
@@ -141,6 +147,14 @@ fn compile_content(dir: &str, templates: &mut Tera, theme: &Theme) -> io::Result
                 if let Ok(file_path) = entry.strip_prefix(dir) {
                     if is_hidden(&entry) {
                         continue;
+                    }
+
+                    if let Some(ext) = file_path.extension() {
+                        if let Some(ext) = ext.to_str() {
+                            if !re.is_match(ext) {
+                                continue;
+                            }
+                        }
                     }
 
                     if let Some(file_path) = file_path.to_str() {
@@ -164,7 +178,6 @@ fn compile_content(dir: &str, templates: &mut Tera, theme: &Theme) -> io::Result
                                 println!("Failed to render {file_path:?} {:?}", err);
                             }
 
-                            let re = Regex::new(r"/?(index)?\.(md|html|tera)(.+)?").unwrap();
                             let mut slug = re.replace(file_path, "").to_string();
                             slug.insert(0, '/');
 
@@ -244,7 +257,6 @@ fn main() -> io::Result<()> {
     let file = fs::File::open(&opts.theme)?;
     let mut reader = BufReader::new(file);
     let theme = ThemeSet::load_from_reader(&mut reader).unwrap();
-    println!("Loaded {}", &opts.theme);
 
     let content = compile_content(&opts.content, &mut templates, &theme)?;
 
@@ -265,4 +277,3 @@ fn main() -> io::Result<()> {
 
     Ok(())
 }
-

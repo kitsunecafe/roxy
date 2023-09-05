@@ -824,7 +824,6 @@ dependencies = [
  "clap",
  "glob",
  "highlight-pulldown",
- "lazy_static",
  "pulldown-cmark",
  "regex",
  "serde",
