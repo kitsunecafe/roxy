@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    error::Error,
     fs,
     io::{self, BufRead, BufReader, Read, Seek, Write},
     path::Path,
@@ -254,11 +253,20 @@ fn main() -> io::Result<()> {
 
     let mut templates = load_templates(&opts.layouts);
 
-    let file = fs::File::open(&opts.theme)?;
-    let mut reader = BufReader::new(file);
-    let theme = ThemeSet::load_from_reader(&mut reader).unwrap();
+    let theme_set = ThemeSet::load_defaults();
 
-    let content = compile_content(&opts.content, &mut templates, &theme)?;
+    let theme = if let Ok(file) = fs::File::open(&opts.theme) {
+        let mut reader = BufReader::new(file);
+        let theme = ThemeSet::load_from_reader(&mut reader);
+        theme.ok()
+    } else {
+        None
+    };
+
+    let default_theme = theme_set.themes.get(&opts.theme);
+    let theme = theme.as_ref().or(default_theme);
+
+    let content = compile_content(&opts.content, &mut templates, &theme.unwrap())?;
 
     let content_map = compile_content_map(&content);
     let mut context = Context::new();

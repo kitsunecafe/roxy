@@ -4,7 +4,7 @@ This is a very lightweight and small static site generator. This is a highly uns
 # Usage
 
 ```rs
-roxy --layouts ./layouts --input ./content --output ./build --theme theme.tmTheme
+roxy --layouts ./layouts --content ./content --output ./build --theme theme.tmTheme
 ```
 
 ## Layouts
